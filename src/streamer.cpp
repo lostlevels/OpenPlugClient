@@ -18,9 +18,7 @@ void Streamer::create_stream(int channels, PaSampleFormat format, double sample_
 }
 
 void Streamer::feed_data(const std::vector<float> &samples) {
-	assert(!samples.empty());
 	if (samples.empty()) return;
-
 
 	data.insert(data.end(), samples.begin(), samples.end());
 	trim_data();

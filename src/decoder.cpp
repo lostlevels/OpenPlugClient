@@ -90,7 +90,6 @@ bool Decoder::load_file(const std::string &filename) {
 
 void Decoder::tick(std::function<void(std::vector<float> &samples)> callback) {
 	if (!format_context || !codec_context || !decoding) return;
-
 	static std::vector<float> buffer(16384, 0);
 
 	if (av_read_frame(format_context, &packet) == 0) {
@@ -150,7 +149,6 @@ void convert_samples(const uint8_t **source_data, int num_channels, int size, fl
 
 // planar - not packed, data in frame->data[0] and next channel is frame->data[1] and so on.
 void Decoder::process_planar_audio_frame(const AVCodecContext *context, const AVFrame *frame, std::vector<float> &output_buffer) {
-
 	// int byte_size = frame->nb_samples * context->channels * av_get_bytes_per_sample(context->sample_fmt);
 	// int size = byte_size / sizeof(float);
 	// Note we just convert to float now with swr
@@ -177,7 +175,6 @@ void Decoder::process_planar_audio_frame(const AVCodecContext *context, const AV
 
 // packed, all data of all channels packed in data[0]
 void Decoder::process_packed_audio_frame(const AVCodecContext *context, const AVFrame *frame, std::vector<float> &output_buffer) {
-
 	// Note we just use 1 channel and multiply sample count by channels
 	if (context->sample_fmt == AV_SAMPLE_FMT_S16) {
 		convert_samples<int16_t>((const uint8_t**)frame->data, 1, frame->nb_samples * context->channels, 32768.0f, output_buffer);
