@@ -42,7 +42,7 @@ bool Decoder::load_file(const std::string &filename) {
 	decoding = false;
 	destroy_contexts();
 
-	AVCodec *cdc = nullptr;
+	AVCodec *cdc = NULL;
 	int stream_index;
 
 	format_context = NULL;
@@ -96,22 +96,20 @@ void Decoder::tick(std::function<void(std::vector<float> &samples)> callback) {
 	if (av_read_frame(format_context, &packet) == 0) {
 		if (packet.stream_index == audio_stream->index) {
 			// Audio packets can have multiple audio frames in a single packet
-			AVPacket decoding_packet = packet;
-
-			while (decoding_packet.size > 0) {
+			while (packet.size > 0) {
 				int got_frame = 0;
-				int result = avcodec_decode_audio4(codec_context, frame, &got_frame, &decoding_packet);
+				int result = avcodec_decode_audio4(codec_context, frame, &got_frame, &packet);
 
 				if (result >= 0 && got_frame) {
-					decoding_packet.size -= result;
-					decoding_packet.data += result;
+					packet.size -= result;
+					packet.data += result;
 
 					process_audio_frame(codec_context, frame, buffer);
 					if (callback) callback(buffer);
 				}
 				else {
-					decoding_packet.size = 0;
-					decoding_packet.data = nullptr;
+					packet.size = 0;
+					packet.data = NULL;
 				}
 			}
 		}

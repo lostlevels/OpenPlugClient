@@ -17,10 +17,10 @@ int main(int argc, const char * argv[]) {
 	av_register_all();
 
 	// Download
-	std::string temp_file = "/Users/jimmy/Desktop/download.temp";
+	std::string temp_file = "./download.temp";
 	char command[1024] = {0};
 	const char *youtube_link = argv[1];
-	snprintf(command, sizeof(command) - 1, "/Users/jimmy/Desktop/youtube-dl -o '%s' -f 140 %s", temp_file.c_str(), youtube_link);
+	snprintf(command, sizeof(command) - 1, "./youtube-dl -o '%s' -f 140 %s", temp_file.c_str(), youtube_link);
 	system(command);
 
 	Client client;
