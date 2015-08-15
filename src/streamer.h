@@ -14,6 +14,7 @@ public:
 
 	// Pass in data for streamer to copy periodically
 	void feed_data(const std::vector<float> &samples);
+	void stop();
 
 	// Call anytime new format / channels / sample_rate
 	void create_stream(int channels, PaSampleFormat format, double sample_rate);
@@ -26,6 +27,7 @@ public:
 private:
 	PaStream *stream;
 	int       num_channels;
+	int       num_misses;
 
 	int last_data_position;
 	std::vector<float> data;
