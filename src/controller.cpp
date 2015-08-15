@@ -51,7 +51,7 @@ void Controller::draw() {
 	getmaxyx(stdscr, max_y, max_x);
 	clear();
 
-	//mvprintw(1, 0, "wait %d play %d loaded %d done %d", waiting_for_file, playing, player.is_file_loaded(), player.is_file_done_playing());
+	mvprintw(1, 0, "wait %d play %d loaded %d done %d", waiting_for_file, playing, player.is_file_loaded(), player.is_file_done_playing());
 
 	if (!timer.is_stopped() && !timer.is_done()) mvprintw(0, 0, "Time: %02d", static_cast<int>(timer.get_time_remaining()));
 
@@ -193,13 +193,9 @@ void Controller::process_command_playlist_current(const Arguments &args) {
 
 				if (time_left < 5) {
 					// nearing end. call self again to avoid noise
-					should_fetch_playlist_song = false;
+					should_fetch_playlist_song = true;
 					return;
-					// return process_command_playlist_current();
 				}
-
-				// !TEST!
-				//elapsed_seconds = 60;
 
 				add_message("Seeking %d seconds for time left of %d", elapsed_seconds, time_left);
 				timer.reset(time_left);
