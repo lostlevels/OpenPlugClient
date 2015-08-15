@@ -4,10 +4,11 @@
 ### Depedencies
 
  * libavcodec
- * libCURL
  * PortAudio
  * RapidJSON
  * youtube-dl
+ * curses
+ * happyhttp (included)
 
 ### Building
 * todo
