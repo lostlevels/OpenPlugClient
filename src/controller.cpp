@@ -51,7 +51,7 @@ void Controller::draw() {
 	getmaxyx(stdscr, max_y, max_x);
 	clear();
 
-	mvprintw(1, 0, "wait %d play %d loaded %d done %d", waiting_for_file, playing, player.is_file_loaded(), player.is_file_done_playing());
+	//mvprintw(1, 0, "wait %d play %d loaded %d done %d", waiting_for_file, playing, player.is_file_loaded(), player.is_file_done_playing());
 
 	if (!timer.is_stopped() && !timer.is_done()) mvprintw(0, 0, "Time: %02d", static_cast<int>(timer.get_time_remaining()));
 
@@ -90,10 +90,7 @@ void Controller::process_line(const std::string &line) {
 	if (args.size() < 1) return;
 	auto &command = args[0];
 
-	if (command == "http") {
-		//process_command_play(command);
-	}
-	else if (command == "playlist" && args.size() == 2) {
+	if (command == "playlist" && args.size() == 2) {
 		process_command_playlist(args);
 	}
 	else if (command == "playlist" && args.size() == 3 && args[2] == "play") {
@@ -258,7 +255,6 @@ void Controller::process_command_playlist_add(const Arguments &args) {
 		Song song = get_song_info(youtube_url, get_info_log_file());
 
 		std::string url = build_api("/playlists/" + last_created_playlist + "/songs?" + build_post_parameters(song));
-		add_message(url);
 		requests.post(url, "", [&](const std::string &response, bool success) {
 			rapidjson::Document json;
 			if (json.Parse(response.c_str()).HasParseError()) return;
