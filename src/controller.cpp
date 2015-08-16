@@ -117,11 +117,20 @@ void Controller::process_line(const std::string &line) {
 			else add_message(song_name);
 		}
 	}
+	else if (command == "help") {
+		add_message("'playlist name' retrieves a playlist");
+		add_message("'playlist name play' starts playing a playlist");
+		add_message("'playlist name add' tries to create playlist named add");
+		add_message("'playlist name add youtube_url' tries to add song to playlist name");
+	}
 	else if (command == "playlist" && args.size() == 3 && args[2] == "play") {
 		process_command_playlist_single(args);
 	}
 	else if (command == "playlist") {
 		process_command_playlist_add(args);
+	}
+	else {
+		add_message("type 'help' for more info.");
 	}
 }
 

@@ -1,5 +1,8 @@
 # CLI client for [OpenPlugServer](https://github.com/DerrickGold/OpenPlugServer)
 
+### Screeny
+![picture](https://raw.githubusercontent.com/lostlevels/OpenPlugClient/master/screen.png)
+
 ### Depedencies
  * libavcodec
  * PortAudio
@@ -17,5 +20,3 @@
  * add playlist foo : ```playlist foo add```
  * add song on [youtube](https://www.youtube.com/watch?v=5ShzyggtsCs) to playlist foo : ```playlist foo add https://www.youtube.com/watch?v=5ShzyggtsCs```
 
-### Screeny
-![picture](https://raw.githubusercontent.com/lostlevels/OpenPlugClient/master/screen.png)
