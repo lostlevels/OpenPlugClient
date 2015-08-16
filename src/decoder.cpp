@@ -5,14 +5,20 @@
 
 #define kBufferSize 64 * 1024
 
+enum {
+    API_MODE_OLD                  = 0, /* old method, deprecated */
+    API_MODE_NEW_API_REF_COUNT    = 1, /* new method, using the frame reference counting */
+    API_MODE_NEW_API_NO_REF_COUNT = 2, /* new method, without reference counting */
+};
+
+static const int api_mode = API_MODE_NEW_API_REF_COUNT;
+
 Decoder::Decoder() :
 	format_context(NULL),
 	codec_context(NULL),
 	audio_stream(NULL),
 	frame(NULL),
-	decoding(false),
-	file(NULL),
-	io_buffer(NULL)
+	decoding(false)
 {
 
 }
@@ -27,7 +33,6 @@ void Decoder::destroy_contexts() {
 	// if (codec_context) avcodec_close(codec_context);
 	// if (format_context) avformat_close_input(&format_context);
 
-	io_buffer = NULL;
 	codec_context = NULL;
 	format_context = NULL;
 }
@@ -47,85 +52,44 @@ DecoderInfo Decoder::get_decoder_info() {
 	return info;
 }
 
-int read_packet(void *user_data, uint8_t *buffer, int buffer_size) {
-	Decoder *decoder = reinterpret_cast<Decoder*>(user_data);
-	FILE *file = decoder->get_file();
-	int location = ftell(file);
-	int bytes_read = fread(buffer, 1, buffer_size, file);
-	if (bytes_read != buffer_size) {
-		log_text("read error %d read vs %d requested @ location %d\n", bytes_read, buffer_size, location);
-	}
-
-	return bytes_read;
-}
-
-int64_t seek_packet(void *user_data, int64_t pos, int whence) {
-	Decoder *decoder = reinterpret_cast<Decoder*>(user_data);
-	FILE *file = decoder->get_file();
-
-	if (whence == AVSEEK_SIZE) {
-		auto current = ftell(file);
-		fseek(file, 0, SEEK_END);
-		auto size = ftell(file);
-		fseek(file, current, SEEK_SET);
-		log_text("\nSeeking size, current eof %ld vs manual filesize %d\n", size, decoder->get_manual_filesize());
-		return std::max(decoder->get_manual_filesize(), static_cast<int>(size));
-	}
-	log_text("Seeking to %lld\n", whence + pos);
-	int rs = fseek(file, (long)pos, whence);
-	if (rs != 0) return -1;
-
-	return static_cast<int64_t>(ftell(file));
-}
-
-bool Decoder::load_file(const std::string &filename, int manual_filesize) {
+bool Decoder::load_file(const std::string &filename) {
 	decoding = false;
 	destroy_contexts();
 
-	this->manual_filesize = manual_filesize;
-
-	if (!io_buffer) io_buffer = static_cast<uint8_t*>(av_malloc(kBufferSize));
-	io_context = avio_alloc_context(io_buffer, kBufferSize, 0, this, read_packet, 0, seek_packet);
-
-	if (file) fclose(file);
-	file = fopen(filename.c_str(), "rb");
-
-	AVCodec *cdc = NULL;
-
-	format_context = avformat_alloc_context();
-	format_context->pb = io_context;
-	format_context->flags |= AVFMT_FLAG_CUSTOM_IO;
-
-	AVProbeData probeData;
-	probeData.buf = io_buffer;
-	probeData.buf_size = kBufferSize;
-	probeData.filename = "";
-	format_context->iformat = av_probe_input_format(&probeData, 1);
-
-	// no filename for 2nd argument this time since custom
-	if (avformat_open_input(&format_context, "", NULL, NULL) != 0 || avformat_find_stream_info(format_context, NULL) != 0 ||
-		(stream_index = av_find_best_stream(format_context, AVMEDIA_TYPE_AUDIO, -1, -1, &cdc, 0)) < 0) {
+	if (avformat_open_input(&format_context, filename.c_str(), NULL, NULL) != 0 || avformat_find_stream_info(format_context, NULL) != 0 ||
+		(stream_index = av_find_best_stream(format_context, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0)) < 0) {
 		if (format_context) avformat_close_input(&format_context);
 		format_context = NULL;
 		fprintf(stderr, "Unable to open file or find stream %s\n", filename.c_str());
 		return false;
 	}
+	AVStream *st;
+    AVCodecContext *dec_ctx = NULL;
+    AVCodec *dec = NULL;
+    AVDictionary *opts = NULL;
 
-	frame = av_frame_alloc();
-	assert(frame);
+    st = format_context->streams[stream_index];
+    /* find decoder for the stream */
+    dec_ctx = st->codec;
+    dec = avcodec_find_decoder(dec_ctx->codec_id);
+    if (!dec) return false;
+
+    if (api_mode == API_MODE_NEW_API_REF_COUNT)
+		av_dict_set(&opts, "refcounted_frames", "1", 0);
+
+	if (avcodec_open2(dec_ctx, dec, &opts) < 0) return false;
 
 	audio_stream = format_context->streams[stream_index];
-	codec_context = audio_stream->codec;
-	codec_context->codec = cdc;
+    codec_context = audio_stream->codec;
 
-	if (avcodec_open2(codec_context, codec_context->codec, NULL) != 0) {
-		av_free(frame);
-		avformat_close_input(&format_context);
-		fprintf(stderr, "Can't open codec\n");
-		return false;
-	}
-	log_text("%s has %d channels. sample_rate of %d. format of %s\n", filename.c_str(), codec_context->channels, codec_context->sample_rate, av_get_sample_fmt_name(codec_context->sample_fmt));
+    if (api_mode == API_MODE_OLD)
+        frame = avcodec_alloc_frame();
+    else
+        frame = av_frame_alloc();
+	assert(frame);
+
 	av_init_packet(&packet);
+
 	decoding = true;
 
 //	swr = swr_alloc();
@@ -152,11 +116,11 @@ void Decoder::tick(std::function<void(std::vector<float> &samples)> callback) {
 	if (!format_context || !codec_context || !decoding) return;
 	static std::vector<float> buffer(16384, 0);
 
+	int got_frame = 0;
 	if (av_read_frame(format_context, &packet) == 0) {
 		if (packet.stream_index == audio_stream->index) {
 			// Audio packets can have multiple audio frames in a single packet
 			while (packet.size > 0) {
-				int got_frame = 0;
 				int result = avcodec_decode_audio4(codec_context, frame, &got_frame, &packet);
 
 				if (result >= 0 && got_frame) {
@@ -173,7 +137,6 @@ void Decoder::tick(std::function<void(std::vector<float> &samples)> callback) {
 			}
 		}
 
-		// call av_free_packet() after each call to av_read_frame()
 		av_free_packet(&packet);
 	}
 	else {
@@ -182,8 +145,8 @@ void Decoder::tick(std::function<void(std::vector<float> &samples)> callback) {
 	}
 
 	// Flush remaining - if decoding flag not set, we must've finished this frame.
-	if (!decoding && codec_context->codec->capabilities & CODEC_CAP_DELAY) {
-		av_init_packet(&packet);
+	if (!decoding && ((codec_context->codec->capabilities & CODEC_CAP_DELAY) || got_frame)) {
+		av_init_packet(&packet); // needed ?
 		int got_frame = 0;
 		while (avcodec_decode_audio4(codec_context, frame, &got_frame, &packet) >= 0 && got_frame) {
 			process_audio_frame(codec_context, frame, buffer);

@@ -109,3 +109,17 @@ std::string String::url_encode(const std::string &url) {
 	}
 	return copy;
 }
+
+char *String::fgets_trim(char *str, int num, FILE *stream) {
+	auto result = fgets(str, num, stream);
+	str[strcspn(str, "\r\n")] = '\0';
+	return result;
+}
+
+std::string String::get_padded_string(const std::string &str, int num_chars, char with) {
+	std::string copy = str;
+	if (copy.size() < num_chars) {
+		copy.insert(copy.end(), num_chars - copy.size(), with);
+	}
+	return copy;
+}

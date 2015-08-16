@@ -56,7 +56,7 @@ int Streamer::on_stream_update(void *outputBuffer, unsigned long frames_per_buff
 	}
 
 	if (not_enough_data) {
-		log_text("Not enough data by %d\n", not_enough_amount);
+		log_text("Not enough data by %d %d\n", not_enough_amount, data.size());
 	}
 	return 0;
 }

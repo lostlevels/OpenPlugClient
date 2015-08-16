@@ -22,6 +22,7 @@ public:
 	int on_stream_update(void *outputBuffer, unsigned long frames_per_buffer);
 
 	int get_buffered_data_size() const;
+	int get_size_not_uploaded() const;
 	bool is_done_playing() const;
 
 private:
@@ -37,6 +38,10 @@ private:
 
 inline int Streamer::get_buffered_data_size() const {
 	return static_cast<int>(data.size());
+}
+
+inline int Streamer::get_size_not_uploaded() const {
+	return static_cast<int>(data.size()) - last_data_position;
 }
 
 inline bool Streamer::is_done_playing() const {

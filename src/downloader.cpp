@@ -5,13 +5,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+
 void download_file(const std::string &youtube_link, const std::string &output_file, const std::string &log_file) {
 	// 140 = aac
 	// 171 = vorbis
 	static char command[2048] = {0};
 	snprintf(command, sizeof(command) - 1, "export PATH=$PATH:/usr/local/bin; youtube-dl --no-cache-dir --no-part -o '%s' -f 171 %s > %s", output_file.c_str(), youtube_link.c_str(), log_file.c_str());
 	system(command);
-	log_text("downloading file %s done to %s %s!\n", youtube_link.c_str(), output_file.c_str(), log_file.c_str());
+	log_text("downloaded file %s to %s with log %s\n", youtube_link.c_str(), output_file.c_str(), log_file.c_str());
 }
 
 void get_song_info(const std::string &youtube_link, const std::string &log_file, SongInfoCallback callback) {
@@ -20,12 +21,6 @@ void get_song_info(const std::string &youtube_link, const std::string &log_file,
 		if (callback) callback(song_info, true);
 	});
 	thread.detach();
-}
-
-static char *fgets_trim(char *str, int num, FILE *stream) {
-	auto result = fgets(str, num, stream);
-	str[strcspn(str, "\r\n")] = '\0';
-	return result;
 }
 
 Song get_song_info(const std::string &youtube_link, const std::string &log_file) {
@@ -42,11 +37,11 @@ Song get_song_info(const std::string &youtube_link, const std::string &log_file)
 	char buffer[256];
 
 	// First line will be title
-	fgets_trim(buffer, sizeof(buffer) - 1, file);
+	String::fgets_trim(buffer, sizeof(buffer) - 1, file);
 	name = buffer;
 
 	// 2nd line will be duration
-	fgets_trim(buffer, sizeof(buffer) - 1, file);
+	String::fgets_trim(buffer, sizeof(buffer) - 1, file);
 	std::vector<std::string> duration_parts = String::split(buffer, ":");
 	int seconds_multiplier = 1;
 	for (int i = static_cast<int>(duration_parts.size()) - 1; i > -1; i--) {
@@ -68,7 +63,7 @@ Song get_song_info(const std::string &youtube_link, const std::string &log_file)
 	if (!file) return song_info;
 
 	// Read line by line until we get right format
-	while (fgets_trim(buffer, sizeof(buffer) - 1, file)) {
+	while (String::fgets_trim(buffer, sizeof(buffer) - 1, file)) {
 		if (strstr(buffer, "171")) {
 			auto words = String::split(buffer, " \r\n");
 			// last should be file size.

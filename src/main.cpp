@@ -12,6 +12,7 @@
 #include "downloader.h"
 #include "request.h"
 #include "log.h"
+#include "decoder.h"
 
 void system_init();
 void system_destroy();
@@ -33,6 +34,8 @@ void system_init() {
 
 	initscr();
 	timeout(0);
+	start_color();
+	use_default_colors();
 
 	log_init("/tmp/opc_log.txt");
 }

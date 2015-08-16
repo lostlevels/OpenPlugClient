@@ -15,4 +15,8 @@ public:
 	static std::string get_host(const std::string &url);
 
 	static std::string url_encode(const std::string &url);
+
+	static char *fgets_trim(char *str, int num, FILE *stream);
+
+	static std::string get_padded_string(const std::string &str, int num_chars, char with);
 };

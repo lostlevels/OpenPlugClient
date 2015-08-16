@@ -11,10 +11,9 @@
 #define kEscapeKey 27
 #define kDeleteKey 127
 
-// Temp for now to avoid static ...
-static void adjust_song_filesize(Song &song) {
-	song.filesize = std::max(1, song.filesize - static_cast<int>(song.filesize / static_cast<float>(song.duration) * 2.5f));
-}
+#define HEADING_PAIR 1
+#define TEXT_PAIR 2
+#define SELECTED_PAIR 3
 
 Controller::Controller(const std::string &host) :
 	host(host),
@@ -23,8 +22,13 @@ Controller::Controller(const std::string &host) :
 	playing(false),
 	waiting_for_file(false),
 	fetching_playlist_songs(false),
-	fetching_playlist_current(false),
-	should_fetch_playlist_song(false) {
+	fetching_playlist_single(false),
+	should_fetch_playlist_single(false),
+	retrieving_song_info(false) {
+
+	init_pair(HEADING_PAIR, COLOR_WHITE, COLOR_BLUE);
+	init_pair(TEXT_PAIR, COLOR_BLACK, COLOR_WHITE);
+	init_pair(SELECTED_PAIR, COLOR_CYAN, COLOR_WHITE);
 
 	for (int i = 0; i < 10; i++) {
 		std::string download_file = get_download_file_prefix() + std::to_string(i);
@@ -38,8 +42,7 @@ Controller::Controller(const std::string &host) :
 }
 
 Controller::~Controller() {
-	if (download_thread_main.joinable()) download_thread_main.join();
-	if (download_thread_second.joinable()) download_thread_second.join();
+	if (download_thread.joinable()) download_thread.join();
 
 	for (auto &kv : cached_files) {
 		remove(kv.second.c_str());
@@ -50,12 +53,25 @@ void Controller::draw() {
 	int max_y, max_x;
 	getmaxyx(stdscr, max_y, max_x);
 	clear();
+	std::string blank_line = String::get_padded_string("", max_x, ' ');
 
-	mvprintw(1, 0, "wait %d play %d loaded %d done %d", waiting_for_file, playing, player.is_file_loaded(), player.is_file_done_playing());
+	bkgd(COLOR_PAIR(0));
 
-	if (!timer.is_stopped() && !timer.is_done()) mvprintw(0, 0, "Time: %02d", static_cast<int>(timer.get_time_remaining()));
+	attron(COLOR_PAIR(HEADING_PAIR));
+	if (!timer.is_stopped() && !timer.is_done()) {
+		mvprintw(max_y - 2, 0, blank_line.c_str());
+		std::string song_heading = current_song.name + " Time: " + std::to_string(static_cast<int>(timer.get_time_remaining()));
+		mvprintw(max_y - 2, 0, song_heading.c_str());
+	}
+	mvprintw(0, 0, blank_line.c_str());
+	std::string heading = !playlist.name.empty() ? "In room " + playlist.name : "OpenPlugServer";
+	mvprintw(0, 0, heading.c_str());
+	attroff(COLOR_PAIR(HEADING_PAIR));
 
-	messages.draw(2, 0, max_y - 3);
+	attron(COLOR_PAIR(TEXT_PAIR));
+	messages.draw(1, 0, max_y - 2, max_x);
+	attroff(COLOR_PAIR(HEADING_PAIR));
+
 	mvprintw(max_y - 1, 0, current_line.c_str());
 
 	refresh();
@@ -75,14 +91,11 @@ void Controller::process_input(int c) {
 			add_message("'" + current_line + "'");
 			process_line(current_line);
 		}
-
 		current_line = "";
 	}
 	else {
 		current_line += c;
 	}
-
-	draw();
 }
 
 void Controller::process_line(const std::string &line) {
@@ -93,8 +106,19 @@ void Controller::process_line(const std::string &line) {
 	if (command == "playlist" && args.size() == 2) {
 		process_command_playlist(args);
 	}
+	else if (command == "clear") {
+		messages.clear();
+	}
+	else if (command == "songs") {
+		for (auto i = 0; i < playlist.order.size(); i++) {
+			auto &song_name = playlist.songs[playlist.order[i]].name;
+			bool bold = song_name == current_song.name;
+			if (bold) add_bold_message(song_name);
+			else add_message(song_name);
+		}
+	}
 	else if (command == "playlist" && args.size() == 3 && args[2] == "play") {
-		process_command_playlist_current(args);
+		process_command_playlist_single(args);
 	}
 	else if (command == "playlist") {
 		process_command_playlist_add(args);
@@ -118,7 +142,6 @@ static std::string build_post_parameters(const Song &song) {
 void Controller::process_command_playlist(const Arguments &args) {
 	if (args.size() < 2) return;
 	fetching_playlist_songs = true;
-
 	playlist.name = args[1];
 
 	requests.get(build_api("/playlists/" + playlist.name + "/songs/"),  [&](const std::string &response, bool success) {
@@ -131,17 +154,16 @@ void Controller::process_command_playlist(const Arguments &args) {
 			playlist.songs.clear();
 			playlist.order.clear();
 
-			const rapidjson::Value& songs_array = json["data"];
+			const rapidjson::Value &songs_array = json["data"];
 			for (auto i = 0; i < songs_array.Size(); i++) {
 				add_message("%d. %s", i + 1, songs_array[i]["title"].GetString());
-
 				int song_length = songs_array[i]["length"].GetInt();
 				int id = songs_array[i]["id"].GetInt();
 				Song song(songs_array[i]["title"].GetString(), songs_array[i]["youtube_url"].GetString(),
 					song_length, songs_array[i]["filesize"].GetInt());
 				song.priority = songs_array[i]["priority"].GetDouble();
+				song.id = songs_array[i]["id"].GetInt();
 
-				adjust_song_filesize(song);
 				playlist.songs[id] = song;
 			}
 
@@ -156,22 +178,21 @@ void Controller::process_command_playlist(const Arguments &args) {
 	});
 }
 
-void Controller::process_command_playlist_current(const Arguments &args) {
+void Controller::process_command_playlist_single(const Arguments &args, bool update_playlist_first) {
 	if (args.size() < 3) return;
-	if (playlist.songs.empty()) {
-		// this will trigger player after getting playlist
-		should_fetch_playlist_song = true;
+	if (playlist.songs.empty() || update_playlist_first) {
+		should_fetch_playlist_single = true;
 		process_command_playlist({args[0], args[1]});
 		return;
 	}
 
 	playlist.name = args[1];
-	fetching_playlist_current = true;
-	should_fetch_playlist_song = false;
+	fetching_playlist_single = true;
+	should_fetch_playlist_single = false;
 
 	requests.get(build_api("/playlists/" + playlist.name), [&](const std::string &response, bool success) -> void {
 		rapidjson::Document json;
-		fetching_playlist_current = false;
+		fetching_playlist_single = false;
 
 		if (json.Parse(response.c_str()).HasParseError()) {
 			log_text("json error!");
@@ -191,27 +212,10 @@ void Controller::process_command_playlist_current(const Arguments &args) {
 				int elapsed_seconds = requested_time - song_start_time;
 				int time_left = playlist.songs[id].duration - elapsed_seconds;
 
-				if (time_left < 5) {
+				if (time_left < 3) {
 					// nearing end. call self again to avoid noise
-					should_fetch_playlist_song = true;
+					should_fetch_playlist_single = true;
 					return;
-				}
-
-				// Also start downloading next song - todo make sure users connection can handle the download
-				for (int i = 0; i < (int)playlist.order.size(); i++) {
-					if (playlist.order[i] == id) {
-						if (download_thread_second.joinable()) download_thread_second.join();
-
-						int next_id = i < playlist.order.size() - 1 ? playlist.order[i + 1] : playlist.order[0];
-						if (playlist.songs.find(next_id) != playlist.songs.end() && cached_files.find(playlist.songs[next_id].url) == cached_files.end()) {
-							Song next_song = playlist.songs[next_id];
-							cached_files[next_song.url] = generate_new_download_file();
-							log_text("caching next song to %s", cached_files[next_song.url].c_str());
-							std::thread download_thread(download_file, next_song.url, cached_files[next_song.url], generate_new_log_file());
-							download_thread_second = std::move(download_thread);
-						}
-						break;
-					}
 				}
 
 				add_message("Seeking %d seconds for time left of %d", elapsed_seconds, time_left);
@@ -227,42 +231,53 @@ void Controller::process_command_playlist_add(const Arguments &args) {
 
 	last_created_playlist = args[1];
 	if (args.size() == 3 && args[2] == "add") {
-		// add playlist
-		requests.post(build_api("/playlists/?playlist_name=" + last_created_playlist), "", [&](const std::string &response, bool success) {
-			rapidjson::Document json;
-
-			if (json.Parse(response.c_str()).HasParseError()) {
-				add_message("Playlist error");
-				return;
-			}
-
-			add_message(response);
-			if (json.HasMember("status") && json["status"].GetBool()) {
-				add_message("Created playlist " + last_created_playlist);
-			}
-			else {
-				add_message("Unable to create playlist");
-			}
-		});
+		add_playlist(last_created_playlist);
 	}
 	else if (args.size() == 4 && args[2] == "add") {
-		// add song.
-		auto youtube_url = args[3];
-		Song song = get_song_info(youtube_url, get_info_log_file());
-
-		std::string url = build_api("/playlists/" + last_created_playlist + "/songs?" + build_post_parameters(song));
-		requests.post(url, "", [&](const std::string &response, bool success) {
-			rapidjson::Document json;
-			if (json.Parse(response.c_str()).HasParseError()) return;
-			if (json.HasMember("id") && json.HasMember("priority")) {
-				add_message("Added song " + song.name + " to " + last_created_playlist);
-			}
-			else {
-				add_message("Missing fields " + response);
-				log_text("song post result %s\n", response.c_str());
-			}
-		});
+		add_song(args[3], last_created_playlist);
 	}
+}
+
+void Controller::add_playlist(const std::string &playlist_name) {
+	requests.post(build_api("/playlists/?playlist_name=" + playlist_name), "", [&](const std::string &response, bool success) {
+		rapidjson::Document json;
+
+		if (json.Parse(response.c_str()).HasParseError()) {
+			return add_message("Playlist error");
+		}
+
+		add_message(response);
+		if (json.HasMember("status") && json["status"].GetBool()) {
+			add_message("Created playlist " + playlist_name);
+		}
+		else {
+			add_message("Unable to create playlist");
+		}
+	});
+}
+
+void Controller::add_song(const std::string &youtube_url, const std::string &to_playlist) {
+	// If retrieved_song_info is set, we still need to send the previous one.
+	if (retrieving_song_info || retrieved_song_info) add_message("waiting on another thread.");
+	if (retrieving_song_info) return;
+	if (add_song_thread.joinable()) add_song_thread.join();
+
+	std::thread thread(&Controller::add_song_run, this, youtube_url, to_playlist);
+	add_song_thread = std::move(thread);
+}
+
+void Controller::add_song_run(const std::string &youtube_url, const std::string &to_playlist) {
+	retrieving_song_info = true;
+	retrieved_song_info = false;
+
+	// will block so in own thread.
+	Song song = get_song_info(youtube_url, get_info_log_file());
+	std::string url = build_api("/playlists/" + to_playlist + "/songs?" + build_post_parameters(song));
+	std::lock_guard<std::mutex> guard(mutex);
+	song_url_to_post = url;
+	song_added = song.name;
+	retrieving_song_info = false;
+	retrieved_song_info = true;
 }
 
 void Controller::play_song(const Song &song, int time_offset_seconds) {
@@ -272,37 +287,86 @@ void Controller::play_song(const Song &song, int time_offset_seconds) {
 	current_song = song;
 
 	if (cached_files.find(song.url) == cached_files.end()) {
-		if (download_thread_main.joinable()) download_thread_main.join();
+		if (download_thread.joinable()) download_thread.join();
 
 		current_player_file = cached_files[song.url] = generate_new_download_file();
-		std::string log_file = generate_new_log_file();
-		std::thread download_thread(download_file, song.url, current_player_file, log_file);
-		download_thread_main = std::move(download_thread);
-
-		log_text("downloading %s\n", current_player_file.c_str());
-		log_text("with log %s\n", log_file.c_str());
+		std::thread thread(download_file, song.url, current_player_file, generate_new_log_file());
+		download_thread = std::move(thread);
 	}
 	else {
 		current_player_file = cached_files[song.url];
-		log_text("cached song %s", current_player_file.c_str());
+		log_text("playing cached song %s", current_player_file.c_str());
 	}
+}
+
+bool Controller::finished_song() const {
+	return !timer.is_stopped() && timer.is_done();
+}
+
+bool Controller::should_fetch_song() const {
+	if (fetching_playlist_single || fetching_playlist_songs || playlist.songs.empty()) return false;
+	return finished_song() || should_fetch_playlist_single;
+}
+
+void Controller::try_cache_next_song() {
+	if (!playing || download_thread.joinable() || timer.get_time_remaining() < 60) return;
+
+	int id = current_song.id;
+	for (int i = 0; i < (int)playlist.order.size(); i++) {
+		if (playlist.order[i] == id) {
+			int next_id = i < playlist.order.size() - 1 ? playlist.order[i + 1] : playlist.order[0];
+			if (playlist.songs.find(next_id) != playlist.songs.end() && cached_files.find(playlist.songs[next_id].url) == cached_files.end()) {
+				Song next_song = playlist.songs[next_id];
+				cached_files[next_song.url] = generate_new_download_file();
+				add_message("caching next song to %s", cached_files[next_song.url].c_str());
+				std::thread thread(download_file, next_song.url, cached_files[next_song.url], generate_new_log_file());
+				download_thread = std::move(thread);
+			}
+			break;
+		}
+	}
+}
+
+void Controller::post_song() {
+	if (!retrieved_song_info) return;
+
+	// Should be done if retrieved_song_info set
+	if (add_song_thread.joinable()) add_song_thread.join();
+
+	retrieved_song_info = false;
+
+	requests.post(song_url_to_post, "", [&](const std::string &response, bool success) {
+		rapidjson::Document json;
+		if (!json.Parse(response.c_str()).HasParseError()) {
+			if (json.HasMember("id") && json.HasMember("priority")) {
+				add_message("Added song " + song_added);
+			}
+			else {
+				add_message("Missing fields " + response);
+				log_text("song post result %s\n", response.c_str());
+			}
+		}
+	});
 }
 
 void Controller::tick() {
 	while (running) {
 		process_input(getch());
 
-		if (!playlist.songs.empty() && (should_fetch_playlist_song || (!timer.is_stopped() && timer.is_done())) && !fetching_playlist_current) {
-			add_message("playing next song");
-			timer.stop();
-			process_command_playlist_current({"playlist", playlist.name, "play"});
+		if (should_fetch_song()) {
+			bool reload_playlist = finished_song();
+			if (finished_song()) {
+				timer.stop();
+			}
+			process_command_playlist_single({"playlist", playlist.name, "play"}, reload_playlist);
 		}
 
+		post_song();
 		requests.tick();
 		player_tick();
+		// try_cache_next_song();
 		draw();
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(3));
 	}
 
 	player.stop_processing();
@@ -312,22 +376,17 @@ bool Controller::player_tick() {
 	if (!playing) return false;
 
 	if (waiting_for_file && access(current_player_file.c_str(), R_OK) == 0) {
-		// hacky method to make sure enough is in
-		int min_amount_needed = static_cast<int>(.25f * current_song.filesize);
-		if (current_song.filesize < 1024 * 1024) min_amount_needed = 1024 * 1024;
-
+		// need a few seconds worth plus more.
+		int min_amount_needed = 65536;
 		if (current_time_offset > 0) {
 			min_amount_needed += static_cast<int>(current_song.filesize * current_time_offset/(float)current_song.duration);
 		}
-		min_amount_needed = std::min(min_amount_needed, current_song.filesize - 1024);
-
-		//log_text("min  %d %d %s", min_amount_needed, current_song.filesize, cached_files[current_song.url].c_str());
+		min_amount_needed = std::min(min_amount_needed, current_song.filesize);
 
 		if (File::get_filesize(current_player_file) >= min_amount_needed) {
-			log_text("min_size is %d", min_amount_needed);
 			waiting_for_file = false;
 			add_message("Playing " + current_song.name);
-			bool result = player.load_file(current_player_file, current_song.filesize, current_time_offset);
+			bool result = player.load_file(current_player_file, current_time_offset);
 			assert(result);
 		}
 	}
@@ -359,5 +418,10 @@ void Controller::add_message(const char *format, ...) {
 
 void Controller::add_message(const std::string &message) {
 	messages.add_message(message);
+	draw();
+}
+
+void Controller::add_bold_message(const std::string &message) {
+	messages.add_message(message, true);
 	draw();
 }

@@ -31,7 +31,7 @@ void complete_callback(const happyhttp::Response* r, void* user_data) {
 	request_user_data->request->inform_callbacks(request_user_data->url);
 
 	// Only the user data, not the request object itself.
-	// delete request_user_data;
+	delete request_user_data;
 }
 
 Request::Request() {

@@ -13,9 +13,8 @@ public:
 	~Player();
 
 	void tick();
-	// Pass in manual_filesize if only part of file is downloaded but we know fullsize.
-	// Needed so that we pass correct filesize to libav for proper playing
-	bool load_file(const std::string &filename, int manual_filesize, int time_offset_seconds);
+
+	bool load_file(const std::string &filename, int time_offset_seconds);
 	bool is_file_loaded() const;
 
 	bool is_file_done_playing() const;

@@ -13,9 +13,9 @@ void Player::stop_processing() {
 	streamer.stop();
 }
 
-bool Player::load_file(const std::string &filename, int manual_filesize, int time_offset_seconds) {
+bool Player::load_file(const std::string &filename, int time_offset_seconds) {
 	file_loaded = false;
-	if (decoder.load_file(filename, manual_filesize)) {
+	if (decoder.load_file(filename)) {
 		if (time_offset_seconds > 1) {
 			decoder.seek_to(time_offset_seconds);
 		}
@@ -31,10 +31,12 @@ bool Player::load_file(const std::string &filename, int manual_filesize, int tim
 void Player::tick() {
 	if (!file_loaded || !decoder.is_loaded()) return;
 
-	// If buffer has plenty of space just wait a bit - causing problems?????
-	if (streamer.get_buffered_data_size() > 20 * 1024 * 1024) return;
+	auto info = decoder.get_decoder_info();
+	if (streamer.get_size_not_uploaded() < info.sample_rate * info.channels * 2) {
+		decoder.tick([&](std::vector<float> &decoded_samples) {
+			streamer.feed_data(decoded_samples);
+		});
+	}
 
-	decoder.tick([&](std::vector<float> &decoded_samples) {
-		streamer.feed_data(decoded_samples);
-	});
+	if (decoder.is_done_decoding()) streamer.stop();
 }

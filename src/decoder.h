@@ -16,6 +16,7 @@ extern "C" {
 	#include <libavutil/mathematics.h>
 	#include <libavutil/samplefmt.h>
 	#include <libswresample/swresample.h>
+	#include <libavutil/timestamp.h>
 }
 
 //
@@ -33,7 +34,7 @@ public:
 	Decoder();
 	~Decoder();
 
-	bool         load_file(const std::string &filename, int manual_filesize = 0);
+	bool         load_file(const std::string &filename);
 	bool         is_loaded() const;
 	bool         is_done_decoding() const;
 	void         tick(std::function<void(std::vector<float> &samples)> callback);
@@ -44,8 +45,6 @@ public:
 
 	void         seek_to(float seconds);
 	void         seek_to_millis(int millis);
-	FILE        *get_file();
-	int          get_manual_filesize() const;
 
 private:
 	AVPacket          packet;
@@ -55,12 +54,6 @@ private:
 	AVFormatContext  *format_context;
 	AVCodecContext   *codec_context;
 	AVStream         *audio_stream;
-
-	// For custom file read.
-	AVIOContext     *io_context;
-	FILE            *file;
-	uint8_t         *io_buffer;
-	int              manual_filesize;
 
 	bool             decoding;
 
@@ -80,10 +73,3 @@ inline bool Decoder::is_done_decoding() const {
 	return !decoding;
 }
 
-inline FILE *Decoder::get_file() {
-	return file;
-}
-
-inline int Decoder::get_manual_filesize() const {
-	return manual_filesize;
-}
