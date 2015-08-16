@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string>
-#include <curl/curl.h>
 #include <chrono>
 #include <thread>
 #include <unistd.h>
@@ -30,7 +29,6 @@ int main(int argc, const char * argv[]) {
 
 void system_init() {
 	Pa_Initialize();
-	curl_global_init(CURL_GLOBAL_ALL);
 	av_register_all();
 
 	initscr();
@@ -44,6 +42,5 @@ void system_destroy() {
 
 	endwin();
 
-	curl_global_cleanup();
 	Pa_Terminate();
 }

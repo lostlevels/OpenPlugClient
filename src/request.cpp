@@ -3,7 +3,6 @@
 #include "string.h"
 #include <string.h>
 #include <assert.h>
-#include <curl/curl.h>
 
 struct RequestUserData {
 	Request    *request;

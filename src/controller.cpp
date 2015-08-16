@@ -274,15 +274,13 @@ void Controller::play_song(const Song &song, int time_offset_seconds) {
 	if (cached_files.find(song.url) == cached_files.end()) {
 		if (download_thread_main.joinable()) download_thread_main.join();
 
-		std::string downloaded_filename = cached_files[song.url] = generate_new_download_file();
+		current_player_file = cached_files[song.url] = generate_new_download_file();
 		std::string log_file = generate_new_log_file();
-		std::thread download_thread(download_file, song.url, downloaded_filename, log_file);
+		std::thread download_thread(download_file, song.url, current_player_file, log_file);
 		download_thread_main = std::move(download_thread);
 
-		log_text("downloading %s\n", downloaded_filename.c_str());
+		log_text("downloading %s\n", current_player_file.c_str());
 		log_text("with log %s\n", log_file.c_str());
-
-		current_player_file = downloaded_filename;
 	}
 	else {
 		current_player_file = cached_files[song.url];
@@ -295,7 +293,7 @@ void Controller::tick() {
 		process_input(getch());
 
 		if (!playlist.songs.empty() && (should_fetch_playlist_song || (!timer.is_stopped() && timer.is_done())) && !fetching_playlist_current) {
-			add_message("playing next song %d %d", timer.is_done(), timer.is_stopped());
+			add_message("playing next song");
 			timer.stop();
 			process_command_playlist_current({"playlist", playlist.name, "play"});
 		}
@@ -322,6 +320,8 @@ bool Controller::player_tick() {
 			min_amount_needed += static_cast<int>(current_song.filesize * current_time_offset/(float)current_song.duration);
 		}
 		min_amount_needed = std::min(min_amount_needed, current_song.filesize - 1024);
+
+		//log_text("min  %d %d %s", min_amount_needed, current_song.filesize, cached_files[current_song.url].c_str());
 
 		if (File::get_filesize(current_player_file) >= min_amount_needed) {
 			log_text("min_size is %d", min_amount_needed);
