@@ -182,8 +182,9 @@ void Controller::print_songs() {
 	for (auto i = 0; i < playlist.order.size(); i++) {
 		auto &song_name = playlist.songs[playlist.order[i]].name;
 		bool bold = song_name == current_song.name;
-		if (bold) add_bold_message(song_name);
-		else add_message(song_name);
+		auto entry = std::to_string(i + 1) + ". " + song_name;
+		if (bold) add_bold_message(entry);
+		else add_message(entry);
 	}
 }
 
