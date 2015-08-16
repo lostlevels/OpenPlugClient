@@ -105,27 +105,23 @@ void Controller::process_line(const std::string &line) {
 	auto &command = args[0];
 
 	if (command == "playlist" && args.size() == 2) {
-		process_command_playlist(args);
+		fetch_playlist(args[1]);
 	}
 	else if (command == "clear") {
 		messages.clear();
 	}
-	else if (command == "songs") {
-		for (auto i = 0; i < playlist.order.size(); i++) {
-			auto &song_name = playlist.songs[playlist.order[i]].name;
-			bool bold = song_name == current_song.name;
-			if (bold) add_bold_message(song_name);
-			else add_message(song_name);
-		}
+	else if (command == "songs" && !playlist.name.empty()) {
+		bool print_playlist_after = true;
+		fetch_playlist(playlist.name, print_playlist_after);
 	}
 	else if (command == "help") {
 		add_message("'playlist name' retrieves a playlist");
 		add_message("'playlist name play' starts playing a playlist");
-		add_message("'playlist name add' tries to create playlist named add");
-		add_message("'playlist name add youtube_url' tries to add song to playlist name");
+		add_message("'playlist name add' tries to create playlist named name");
+		add_message("'playlist name add youtube_url' Adds song youtube_url to playlist name");
 	}
 	else if (command == "playlist" && args.size() == 3 && args[2] == "play") {
-		process_command_playlist_single(args);
+		play_current_song(args[1]);
 	}
 	else if (command == "playlist") {
 		process_command_playlist_add(args);
@@ -139,64 +135,67 @@ std::string Controller::build_api(const std::string &path) {
 	return host + path;
 }
 
-static std::string build_post_parameters(const Song &song) {
-	std::string params = "";
-	params += "youtube_url=" + song.url;
-	params += "&title=" + song.name;
-	params += "&artist=unknown";
-	params += "&length=" + std::to_string(song.duration);
-	params += "&filesize=" + std::to_string(song.filesize);
-	return params;
-}
-
-void Controller::process_command_playlist(const Arguments &args) {
-	if (args.size() < 2) return;
+void Controller::fetch_playlist(const std::string &name, bool print_songs_after) {
 	fetching_playlist_songs = true;
-	playlist.name = args[1];
+	playlist.name = name;
 
-	requests.get(build_api("/playlists/" + playlist.name + "/songs/"),  [&](const std::string &response, bool success) {
+	requests.get(build_api("/playlists/" + playlist.name + "/songs/"),  [&, print_songs_after](const std::string &response, bool success) {
 		fetching_playlist_songs = false;
 
 		rapidjson::Document json;
 		if (json.Parse(response.c_str()).HasParseError()) return;
-		if (json.HasMember("total") && json.HasMember("data") && json["data"].IsArray()) {
-			add_message("retrieved playlist " + playlist.name);
-			playlist.songs.clear();
-			playlist.order.clear();
-
-			const rapidjson::Value &songs_array = json["data"];
-			for (auto i = 0; i < songs_array.Size(); i++) {
-				add_message("%d. %s", i + 1, songs_array[i]["title"].GetString());
-				int song_length = songs_array[i]["length"].GetInt();
-				int id = songs_array[i]["id"].GetInt();
-				Song song(songs_array[i]["title"].GetString(), songs_array[i]["youtube_url"].GetString(),
-					song_length, songs_array[i]["filesize"].GetInt());
-				song.priority = songs_array[i]["priority"].GetDouble();
-				song.id = songs_array[i]["id"].GetInt();
-
-				playlist.songs[id] = song;
-			}
-
-			for (auto &kv : playlist.songs) {
-				playlist.order.push_back(kv.first);
-			}
-
-			std::sort(playlist.order.begin(), playlist.order.end(), [&](const int a, const int b) -> bool {
-				return playlist.songs[a].priority < playlist.songs[b].priority;
-			});
+		if (!json.HasMember("total") || !json.HasMember("data") || !json["data"].IsArray()) {
+			add_message("playlist error");
+			return;
 		}
+
+		add_message("retrieved playlist " + playlist.name);
+		playlist.songs.clear();
+		playlist.order.clear();
+
+		const rapidjson::Value &songs_array = json["data"];
+		for (auto i = 0; i < songs_array.Size(); i++) {
+			add_message("%d. %s", i + 1, songs_array[i]["title"].GetString());
+			int song_length = songs_array[i]["length"].GetInt();
+			int id = songs_array[i]["id"].GetInt();
+			Song song(songs_array[i]["title"].GetString(), songs_array[i]["youtube_url"].GetString(),
+				song_length, songs_array[i]["filesize"].GetInt());
+			song.priority = songs_array[i]["priority"].GetDouble();
+			song.id = songs_array[i]["id"].GetInt();
+
+			playlist.songs[id] = song;
+		}
+
+		for (auto &kv : playlist.songs) {
+			playlist.order.push_back(kv.first);
+		}
+
+		std::sort(playlist.order.begin(), playlist.order.end(), [&](const int a, const int b) -> bool {
+			return playlist.songs[a].priority < playlist.songs[b].priority;
+		});
+
+		if (print_songs_after) print_songs();
 	});
 }
 
-void Controller::process_command_playlist_single(const Arguments &args, bool update_playlist_first) {
-	if (args.size() < 3) return;
+void Controller::print_songs() {
+	for (auto i = 0; i < playlist.order.size(); i++) {
+		auto &song_name = playlist.songs[playlist.order[i]].name;
+		bool bold = song_name == current_song.name;
+		if (bold) add_bold_message(song_name);
+		else add_message(song_name);
+	}
+}
+
+void Controller::play_current_song(const std::string &playlist_name, bool update_playlist_first) {
 	if (playlist.songs.empty() || update_playlist_first) {
+		// Flag to let controller know to fetch current song after fetching playlist
 		should_fetch_playlist_single = true;
-		process_command_playlist({args[0], args[1]});
+		fetch_playlist(playlist_name);
 		return;
 	}
 
-	playlist.name = args[1];
+	playlist.name = playlist_name;
 	fetching_playlist_single = true;
 	should_fetch_playlist_single = false;
 
@@ -278,6 +277,16 @@ void Controller::add_song(const std::string &youtube_url, const std::string &to_
 	add_song_thread = std::move(thread);
 }
 
+static std::string build_post_parameters(const Song &song) {
+	std::string params = "";
+	params += "youtube_url=" + song.url;
+	params += "&title=" + song.name;
+	params += "&artist=unknown";
+	params += "&length=" + std::to_string(song.duration);
+	params += "&filesize=" + std::to_string(song.filesize);
+	return params;
+}
+
 void Controller::add_song_run(const std::string &youtube_url, const std::string &to_playlist) {
 	retrieving_song_info = true;
 	retrieved_song_info = false;
@@ -306,7 +315,6 @@ void Controller::play_song(const Song &song, int time_offset_seconds) {
 		download_thread = std::move(thread);
 	}
 	else {
-		// Note that the download might still be in progress as well! - but that should be ok.
 		current_player_file = cached_files[song.url];
 		log_text("playing cached song %s", current_player_file.c_str());
 	}
@@ -314,7 +322,6 @@ void Controller::play_song(const Song &song, int time_offset_seconds) {
 
 void Controller::download_file_run(const std::string &url, const std::string &output_file, const std::string &log_file) {
 	downloading = true;
-	downloading_url = url;
 	download_file(url, output_file, log_file);
 	downloading = false;
 }
@@ -380,7 +387,7 @@ void Controller::tick() {
 			if (finished_song()) {
 				timer.stop();
 			}
-			process_command_playlist_single({"playlist", playlist.name, "play"}, reload_playlist);
+			play_current_song(playlist.name, reload_playlist);
 		}
 
 		post_song();

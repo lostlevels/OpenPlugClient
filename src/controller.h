@@ -66,10 +66,11 @@ private:
 
 	void process_input(int c);
 	void process_line(const std::string &line);
-	void process_command_playlist(const Arguments &args);
-	void process_command_playlist_single(const Arguments &args, bool update_playlist_first = false);
+	void play_current_song(const std::string &playlist_name, bool update_playlist_first = false);
+	void fetch_playlist(const std::string &playlist_name, bool print_songs_after = false);
+	void print_songs();
 
-	// all 'run' functions are executed in own thread
+	// all 'run' functions are executed in own thread. Eerything else should be on main thread.
 	void process_command_playlist_add(const Arguments &args);
 	void add_song(const std::string &youtube_url, const std::string &to_playlist);
 	void add_playlist(const std::string &playlist_name);
