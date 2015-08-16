@@ -222,12 +222,14 @@ void Controller::process_command_playlist_single(const Arguments &args, bool upd
 				int time_left = playlist.songs[id].duration - elapsed_seconds;
 
 				if (time_left < 3) {
-					// nearing end. call self again to avoid noise
+					// nearing end. call self again since probably will want next song instead.
 					should_fetch_playlist_single = true;
 					return;
 				}
 
-				add_message("Seeking %d seconds for time left of %d", elapsed_seconds, time_left);
+				// assume if only a bit of time has passed, that we're still at the start (?)
+				if (elapsed_seconds > 5) add_message("Seeking to %d seconds", elapsed_seconds);
+
 				timer.reset(time_left);
 				play_song(playlist.songs[id], elapsed_seconds);
 			}
@@ -394,7 +396,7 @@ bool Controller::player_tick() {
 
 		if (File::get_filesize(current_player_file) >= min_amount_needed) {
 			waiting_for_file = false;
-			add_message("Playing " + current_song.name);
+			add_bold_message("Playing " + current_song.name);
 			bool result = player.load_file(current_player_file, current_time_offset);
 			assert(result);
 		}
