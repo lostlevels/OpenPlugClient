@@ -80,7 +80,7 @@ void Controller::draw() {
 void Controller::process_input(int c) {
 	if (c == ERR) return;
 
-	if (c == kEscapeKey || c == '\t') {
+	if (c == kEscapeKey) {
 		running = false;
 	}
 	else if (c == kDeleteKey) {
@@ -93,7 +93,7 @@ void Controller::process_input(int c) {
 		}
 		current_line = "";
 	}
-	else {
+	else if (c >= ' ' && c <= '~') {
 		current_line += c;
 	}
 }
