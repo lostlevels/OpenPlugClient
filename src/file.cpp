@@ -56,7 +56,7 @@ std::string get_download_file_prefix() {
 }
 
 std::string generate_new_download_file() {
-	static int i = 0;
+	static int i = 1;
 	return get_download_file_prefix() + std::to_string(i++);
 }
 
@@ -65,6 +65,6 @@ std::string get_log_file_prefix() {
 }
 
 std::string generate_new_log_file() {
-	static int i = 0;
+	static int i = 1;
 	return get_log_file_prefix() + std::to_string(i++);
 }

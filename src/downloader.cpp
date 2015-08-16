@@ -11,7 +11,7 @@ void download_file(const std::string &youtube_link, const std::string &output_fi
 	static char command[2048] = {0};
 	snprintf(command, sizeof(command) - 1, "export PATH=$PATH:/usr/local/bin; youtube-dl --no-cache-dir --no-part -o '%s' -f 171 %s > %s", output_file.c_str(), youtube_link.c_str(), log_file.c_str());
 	system(command);
-	log_text("downloading file %s done!\n", youtube_link.c_str());
+	log_text("downloading file %s done to %s %s!\n", youtube_link.c_str(), output_file.c_str(), log_file.c_str());
 }
 
 void get_song_info(const std::string &youtube_link, const std::string &log_file, SongInfoCallback callback) {

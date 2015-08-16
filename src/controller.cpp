@@ -197,10 +197,6 @@ void Controller::process_command_playlist_current(const Arguments &args) {
 					return;
 				}
 
-				add_message("Seeking %d seconds for time left of %d", elapsed_seconds, time_left);
-				timer.reset(time_left);
-				play_song(playlist.songs[id], elapsed_seconds);
-
 				// Also start downloading next song - todo make sure users connection can handle the download
 				for (int i = 0; i < (int)playlist.order.size(); i++) {
 					if (playlist.order[i] == id) {
@@ -217,6 +213,10 @@ void Controller::process_command_playlist_current(const Arguments &args) {
 						break;
 					}
 				}
+
+				add_message("Seeking %d seconds for time left of %d", elapsed_seconds, time_left);
+				timer.reset(time_left);
+				play_song(playlist.songs[id], elapsed_seconds);
 			}
 		}
 	});
