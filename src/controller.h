@@ -45,7 +45,11 @@ private:
 
 	bool           retrieving_song_info;
 	bool           retrieved_song_info;
+
 	std::thread    download_thread;
+	bool           downloading;
+	// std::string    downloading_url;
+
 	std::thread    add_song_thread; // since would normally block when waiting for youtube-dl response
 	std::mutex     mutex;
 	std::string    song_url_to_post;
@@ -65,10 +69,12 @@ private:
 	void process_command_playlist(const Arguments &args);
 	void process_command_playlist_single(const Arguments &args, bool update_playlist_first = false);
 
+	// all 'run' functions are executed in own thread
 	void process_command_playlist_add(const Arguments &args);
 	void add_song(const std::string &youtube_url, const std::string &to_playlist);
 	void add_playlist(const std::string &playlist_name);
 	void add_song_run(const std::string &youtube_url, const std::string &to_playlist);
+	void download_file_run(const std::string &url, const std::string &output_file, const std::string &log_file);
 	std::string build_api(const std::string &path);
 
 	void add_message(const char *format, ...);

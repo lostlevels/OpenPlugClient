@@ -24,7 +24,8 @@ Controller::Controller(const std::string &host) :
 	fetching_playlist_songs(false),
 	fetching_playlist_single(false),
 	should_fetch_playlist_single(false),
-	retrieving_song_info(false) {
+	retrieving_song_info(false),
+	downloading(false) {
 
 	init_pair(HEADING_PAIR, COLOR_WHITE, COLOR_BLUE);
 	init_pair(TEXT_PAIR, COLOR_BLACK, COLOR_WHITE);
@@ -301,13 +302,21 @@ void Controller::play_song(const Song &song, int time_offset_seconds) {
 		if (download_thread.joinable()) download_thread.join();
 
 		current_player_file = cached_files[song.url] = generate_new_download_file();
-		std::thread thread(download_file, song.url, current_player_file, generate_new_log_file());
+		std::thread thread(&Controller::download_file_run, this, song.url, current_player_file, generate_new_log_file());
 		download_thread = std::move(thread);
 	}
 	else {
+		// Note that the download might still be in progress as well! - but that should be ok.
 		current_player_file = cached_files[song.url];
 		log_text("playing cached song %s", current_player_file.c_str());
 	}
+}
+
+void Controller::download_file_run(const std::string &url, const std::string &output_file, const std::string &log_file) {
+	downloading = true;
+	downloading_url = url;
+	download_file(url, output_file, log_file);
+	downloading = false;
 }
 
 bool Controller::finished_song() const {
@@ -320,7 +329,9 @@ bool Controller::should_fetch_song() const {
 }
 
 void Controller::try_cache_next_song() {
-	if (!playing || download_thread.joinable() || timer.get_time_remaining() < 60) return;
+	if (!playing || timer.get_time_remaining() < 60 || downloading) return;
+	// Just to be safe but it should have finished since downloading isnt set.
+	if (download_thread.joinable()) download_thread.join();
 
 	int id = current_song.id;
 	for (int i = 0; i < (int)playlist.order.size(); i++) {
@@ -329,8 +340,8 @@ void Controller::try_cache_next_song() {
 			if (playlist.songs.find(next_id) != playlist.songs.end() && cached_files.find(playlist.songs[next_id].url) == cached_files.end()) {
 				Song next_song = playlist.songs[next_id];
 				cached_files[next_song.url] = generate_new_download_file();
-				add_message("caching next song to %s", cached_files[next_song.url].c_str());
-				std::thread thread(download_file, next_song.url, cached_files[next_song.url], generate_new_log_file());
+				// add_message("caching next song to %s", cached_files[next_song.url].c_str());
+				std::thread thread(&Controller::download_file_run, this, next_song.url, cached_files[next_song.url], generate_new_log_file());
 				download_thread = std::move(thread);
 			}
 			break;
@@ -375,7 +386,7 @@ void Controller::tick() {
 		post_song();
 		requests.tick();
 		player_tick();
-		// try_cache_next_song();
+		try_cache_next_song();
 		draw();
 		std::this_thread::sleep_for(std::chrono::milliseconds(3));
 	}
