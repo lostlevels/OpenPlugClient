@@ -58,7 +58,7 @@ private:
 	void draw();
 
 	void play_song(const Song &song, int time_offset_seconds = 0);
-	bool player_tick();
+	void player_tick();
 	bool should_fetch_song() const;
 	bool finished_song() const;
 	void try_cache_next_song();

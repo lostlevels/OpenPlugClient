@@ -22,6 +22,7 @@ public:
 
 private:
 	bool        file_loaded;
+	bool        recently_loaded;
 
 	Decoder     decoder;
 	Streamer    streamer;

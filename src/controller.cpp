@@ -401,8 +401,8 @@ void Controller::tick() {
 	player.stop_processing();
 }
 
-bool Controller::player_tick() {
-	if (!playing) return false;
+void Controller::player_tick() {
+	if (!playing) return;
 
 	if (waiting_for_file && access(current_player_file.c_str(), R_OK) == 0) {
 		// need a few seconds worth plus more.
@@ -428,10 +428,7 @@ bool Controller::player_tick() {
 	else if (!waiting_for_file && player.is_file_loaded() && player.is_file_done_playing()) {
 		playing = false;
 		waiting_for_file = false;
-		return true;
 	}
-
-	return false;
 }
 
 void Controller::add_message(const char *format, ...) {
