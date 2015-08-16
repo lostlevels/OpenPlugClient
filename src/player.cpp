@@ -34,7 +34,7 @@ void Player::tick() {
 
 	auto info = decoder.get_decoder_info();
 	int ticks = recently_loaded ? 100 : 1;
-	int min_samples = recently_loaded ? info.sample_rate * info.channels : info.sample_rate * info.channels * 2;
+	int min_samples = recently_loaded ? info.sample_rate * info.channels * 2 : info.sample_rate * info.channels * 5;
 
 	while (ticks-- > 0) {
 		if (streamer.get_size_not_uploaded() < min_samples) {

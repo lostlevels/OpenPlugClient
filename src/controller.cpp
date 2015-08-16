@@ -391,7 +391,13 @@ void Controller::tick() {
 		}
 
 		post_song();
+		try {
 		requests.tick();
+		}
+		catch (happyhttp::Wobbly &exception) {
+			add_message("happyhttp exception %s", exception.what());
+		}
+		
 		player_tick();
 		try_cache_next_song();
 		draw();

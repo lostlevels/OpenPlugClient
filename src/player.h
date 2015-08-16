@@ -28,7 +28,7 @@ private:
 	Streamer    streamer;
 };
 
-inline bool Player::is_file_loaded() const {
+inline bool Player::is_file_loaded() const { 
 	return file_loaded;
 }
 

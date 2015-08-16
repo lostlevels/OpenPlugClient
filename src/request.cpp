@@ -66,6 +66,7 @@ void Request::inform_callbacks(const std::string &url) {
 
 void Request::post(const std::string &url, const std::string &post_fields, RequestCallback callback) {
 	if (url.empty()) return;
+	log_text("POSTing %s\n", url.c_str());
 	callbacks[url] = callback;
 
 	std::string encoded_url = String::url_encode(url);
@@ -85,8 +86,10 @@ void Request::post(const std::string &url, const std::string &post_fields, Reque
 
 void Request::get(const std::string &url, RequestCallback callback) {
 	if (url.empty()) return;
+	log_text("GETing %s\n", url.c_str());
+
 	callbacks[url] = callback;
-	
+
 	std::string encoded_url = String::url_encode(url);
 	happyhttp::Connection *conn = new happyhttp::Connection(String::get_host(encoded_url).c_str(), String::get_port(encoded_url));
 	connections.push_back(conn);
